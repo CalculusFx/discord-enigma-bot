@@ -36,6 +36,9 @@ export default {
         apiKey: process.env.HUGGINGFACE_API_KEY,
     },
 
+    huggingface: {
+    apiKey: process.env.HUGGINGFACE_API_KEY,
+    },
     // Admin Settings
     admin: {
         password: process.env.ADMIN_PASSWORD || 'admin123',
