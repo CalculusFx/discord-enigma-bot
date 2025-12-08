@@ -159,6 +159,11 @@ export class ModerationService {
          * @returns {object|null} ข้อมูลการละเมิด หรือ null ถ้าไม่พบ
          */
         async checkMessage(content) {
+            // ป้องกัน content ไม่ใช่ string
+            if (typeof content !== 'string') {
+                content = String(content ?? '');
+            }
+
             // ตรวจสอบ pattern ที่ block
             for (const [type, patterns] of Object.entries(this.blockedPatterns)) {
                 for (const pattern of patterns) {
