@@ -152,4 +152,65 @@ export class ModerationService {
         };
         return reasons[type] || 'เนื้อหาไม่เหมาะสม';
     }
+
+        /**
+         * ตรวจสอบข้อความว่ามีเนื้อหาผิดกฎหรือไม่
+         * @param {string} content ข้อความที่ต้องการตรวจสอบ
+         * @returns {object|null} ข้อมูลการละเมิด หรือ null ถ้าไม่พบ
+         */
+        async checkMessage(content) {
+            // ตรวจสอบ pattern ที่ block
+            for (const [type, patterns] of Object.entries(this.blockedPatterns)) {
+                for (const pattern of patterns) {
+                    if (pattern.test(content)) {
+                        return {
+                            type,
+                            pattern: pattern.source,
+                            reason: this.getReasonMessage(type)
+                        };
+                    }
+                }
+            }
+
+            // ตรวจสอบ domain ที่ block
+            const urls = content.match(this.urlPattern);
+            if (urls) {
+                for (const url of urls) {
+                    const domain = this.extractDomain(url);
+                    if (this.blockedDomains.includes(domain)) {
+                        return {
+                            type: 'blocked_domain',
+                            pattern: domain,
+                            reason: this.getReasonMessage('blocked_domain')
+                        };
+                    }
+                }
+            }
+
+            // TODO: เพิ่ม AI moderation (Hugging Face) ถ้าต้องการ
+            
+                // ตรวจสอบด้วย Hugging Face (wisesight/bert-base-thai-toxic)
+                try {
+                    const hfResult = await hf.textClassification({
+                        model: 'wisesight/bert-base-thai-toxic',
+                        inputs: content
+                    });
+                    if (hfResult && Array.isArray(hfResult) && hfResult.length > 0) {
+                        // หาค่าที่มี score สูงสุด
+                        const toxic = hfResult.find(r => r.label.toLowerCase().includes('toxic') && r.score > 0.5);
+                        if (toxic) {
+                            return {
+                                type: 'ai_toxic',
+                                pattern: toxic.label,
+                                score: toxic.score,
+                                reason: 'ตรวจพบข้อความไม่เหมาะสมโดย AI (Hugging Face)'
+                            };
+                        }
+                    }
+                } catch (err) {
+                    console.error('AI moderation error:', err);
+                }
+
+            return null; // ไม่พบการละเมิด
+        }
 }
