@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.example
+# Logs
+*.log
+bot.log
+
+# Database (optional - uncomment if you want to keep database on cloud)
+# data/database.json
+
+# Temporary files
+temp/
+*.mp3
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/

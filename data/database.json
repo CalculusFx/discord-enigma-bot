@@ -1,0 +1,83 @@
+{
+  "learnedPatterns": [
+    {
+      "id": 1,
+      "pattern": "สัสเอ้ย",
+      "type": "profanity",
+      "confidence": 0.6,
+      "createdAt": "2025-12-08T18:20:35.532Z",
+      "updatedAt": "2025-12-08T18:26:09.706Z"
+    },
+    {
+      "id": 2,
+      "pattern": "ควย",
+      "type": "profanity",
+      "confidence": 0.5,
+      "createdAt": "2025-12-08T18:33:36.237Z",
+      "updatedAt": "2025-12-08T18:33:36.238Z"
+    },
+    {
+      "id": 3,
+      "pattern": "ควย111",
+      "type": "profanity",
+      "confidence": 0.6,
+      "createdAt": "2025-12-08T18:33:36.237Z",
+      "updatedAt": "2025-12-08T18:33:36.237Z"
+    }
+  ],
+  "moderationLogs": [
+    {
+      "id": 1,
+      "userId": "702724447055904768",
+      "userTag": "_callac_",
+      "username": "_callac_",
+      "guildId": "1143133479232610324",
+      "guildName": "Private server",
+      "channelId": "1143133479232610327",
+      "channelName": "ทั่วไป",
+      "content": "ควย",
+      "violationType": "profanity",
+      "reason": "คำหยาบคายไม่อนุญาต",
+      "actionTaken": "deleted",
+      "timestamp": "2025-12-08T18:23:40.679Z",
+      "date": "9 ธันวาคม 2568",
+      "time": "01:23:40"
+    },
+    {
+      "id": 2,
+      "userId": "702724447055904768",
+      "userTag": "_callac_",
+      "username": "_callac_",
+      "guildId": "1143133479232610324",
+      "guildName": "Private server",
+      "channelId": "1143133479232610327",
+      "channelName": "ทั่วไป",
+      "content": "สัสเอ้ย",
+      "violationType": "profanity",
+      "reason": "คำหยาบคายไม่อนุญาต",
+      "actionTaken": "deleted",
+      "timestamp": "2025-12-08T18:26:09.705Z",
+      "date": "9 ธันวาคม 2568",
+      "time": "01:26:09"
+    },
+    {
+      "id": 3,
+      "userId": "702724447055904768",
+      "userTag": "_callac_",
+      "username": "_callac_",
+      "guildId": "1143133479232610324",
+      "guildName": "Private server",
+      "channelId": "1143133479232610327",
+      "channelName": "ทั่วไป",
+      "content": "ควย111",
+      "violationType": "profanity",
+      "reason": "คำหยาบคายไม่อนุญาต",
+      "actionTaken": "deleted",
+      "timestamp": "2025-12-08T18:33:36.234Z",
+      "date": "9 ธันวาคม 2568",
+      "time": "01:33:36"
+    }
+  ],
+  "blockedDomains": [],
+  "guildSettings": {}
+}
