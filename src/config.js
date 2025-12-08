@@ -32,8 +32,8 @@ export default {
     },
 
     // OpenAI Configuration
-    openai: {
-        apiKey: process.env.OPENAI_API_KEY,
+    huggingface: {
+    apiKey: process.env.HUGGINGFACE_API_KEY
     },
 
     // Admin Settings
