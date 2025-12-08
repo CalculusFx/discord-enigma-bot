@@ -31,8 +31,8 @@ export default {
         clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
     },
 
-    // Hugging Face Configuration
-    huggingface: {
+    // OpenAI Configuration
+    openai: {
         apiKey: process.env.HUGGINGFACE_API_KEY,
     },
 
