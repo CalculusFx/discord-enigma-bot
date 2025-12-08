@@ -15,16 +15,50 @@ export default {
             const result = await client.moderationService.checkMessage(message);
             
             if (result.isViolation) {
+                // Check violation count for user
+                const { getModerationLogsByUser } = await import('../services/database.js');
+                const userLogs = getModerationLogsByUser(message.author.id, 10);
+                const recentViolations = userLogs.filter(log => log.violationType === result.type && log.actionTaken === 'deleted');
+                if (recentViolations.length >= 3) {
+                    // Ban user for 10 minutes
+                    try {
+                        await message.member.timeout(10 * 60 * 1000, 'ละเมิดกฎครบ 3 ครั้ง');
+                        const banEmbed = new EmbedBuilder()
+                            .setColor(config.colors.error)
+                            .setTitle('⛔ ผู้ใช้ถูกแบนชั่วคราว')
+                            .setDescription(
+                                `${message.author} ถูกแบน 10 นาที เนื่องจากละเมิดกฎครบ 3 ครั้ง\n\n` +
+                                `• ประเภทการละเมิด: ${result.type}\n` +
+                                `• เหตุผล: ${result.reason}\n` +
+                                `• เวลา: ${new Date().toLocaleString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                            )
+                            .setFooter({ text: 'ระบบ moderation อัตโนมัติ' })
+                            .setTimestamp();
+                        await message.channel.send({ embeds: [banEmbed] });
+                    } catch (err) {
+                        // ไม่สามารถแบนได้ (เช่น bot ไม่มีสิทธิ์)
+                        await message.channel.send(`⛔ ไม่สามารถแบน ${message.author} ได้ (bot ไม่มีสิทธิ์หรือ role สูงกว่า)`);
+                    }
+                }
                 // Delete the message if auto-delete is enabled
                 if (config.moderation.autoDelete && message.deletable) {
                     await message.delete();
                 }
 
-                // Send warning to user via DM
+                // Send warning to user via DM (with details)
                 const warningEmbed = new EmbedBuilder()
                     .setColor(config.colors.warning)
                     .setTitle('⚠️ เนื้อหาไม่เหมาะสม')
-                    .setDescription(`ข้อความของคุณถูกลบเนื่องจาก: ${result.reason}`)
+                    .setDescription(
+                        `ข้อความของคุณถูกลบเนื่องจาก: ${result.reason}\n\n` +
+                        `**รายละเอียดการละเมิด:**\n` +
+                        `• ผู้ส่ง: ${message.author.tag} (${message.author.id})\n` +
+                        `• เนื้อหา: "${message.content.substring(0, 200)}"\n` +
+                        `• ช่อง: #${message.channel.name}\n` +
+                        `• เวลา: ${new Date().toLocaleString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}\n` +
+                        `• ประเภทการละเมิด: ${result.type}`
+                    )
+                    .setFooter({ text: 'กรุณาปฏิบัติตามกฎของชุมชน' })
                     .setTimestamp();
 
                 try {
@@ -33,12 +67,17 @@ export default {
                     // User has DMs disabled - skip DM
                 }
 
-                // Send public warning in the channel
+                // Send public warning in the channel (with details)
                 const publicWarningEmbed = new EmbedBuilder()
                     .setColor(config.colors.error)
                     .setTitle('⚠️ การแจ้งเตือน')
                     .setDescription(
                         `${message.author} **ข้อความของคุณละเมิดกฎของชุมชน**\n\n` +
+                        `**รายละเอียดการละเมิด:**\n` +
+                        `• เนื้อหา: "${message.content.substring(0, 200)}"\n` +
+                        `• ช่อง: #${message.channel.name}\n` +
+                        `• เวลา: ${new Date().toLocaleString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}\n` +
+                        `• ประเภทการละเมิด: ${result.type}\n\n` +
                         `**เหตุผล:** ${result.reason}\n\n` +
                         `⚠️ หากพบการกระทำผิดซ้ำอีก ทางเรามีความจำเป็นต้องลงโทษตามกฎต่อไป`
                     )
