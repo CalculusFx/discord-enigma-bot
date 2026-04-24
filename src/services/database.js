@@ -16,11 +16,15 @@ const dbPath = join(dataDir, 'database.json');
 function loadDatabase() {
     if (existsSync(dbPath)) {
         try {
-            return JSON.parse(readFileSync(dbPath, 'utf8'));
+            const data = JSON.parse(readFileSync(dbPath, 'utf8'));
+            console.log('[DB] ✅ Loaded existing database from:', dbPath);
+            return data;
         } catch {
+            console.log('[DB] ⚠️ Failed to parse database, using default');
             return createDefaultDatabase();
         }
     }
+    console.log('[DB] 🆕 No database found, creating new at:', dbPath);
     return createDefaultDatabase();
 }
 
