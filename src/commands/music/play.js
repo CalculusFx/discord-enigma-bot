@@ -136,17 +136,31 @@ export default {
                     content: `❌ ไม่สามารถเล่นเพลงนี้ได้: **${query}**\n\nสาเหตุที่เป็นไปได้:\n- เพลงถูกลิขสิทธิ์หรือ geo-block\n- เพลงเป็น official MV หรือมี DRM\n- ข้อจำกัดของ YouTube/Discord-player\n- หรือเพลงนี้ไม่รองรับ extractor ปัจจุบัน\n\nลองเลือกเพลงอื่นหรือใช้ลิงก์จากแหล่งอื่น เช่น SoundCloud, Spotify`,
                 });
             } else {
+                const isPlaylist = result.playlist && result.tracks.length > 1;
                 const embed = new EmbedBuilder()
                     .setColor(config.colors.music)
-                    .setTitle('🎵 เพิ่มในคิว')
-                    .setDescription(`**[${track.title}](${track.url})**`)
-                    .setThumbnail(track.thumbnail)
-                    .addFields(
-                        { name: '⏱️ ระยะเวลา', value: track.duration, inline: true },
-                        { name: '👤 ศิลปิน', value: track.author, inline: true },
-                        { name: '📝 แหล่งที่มา', value: track.source, inline: true },
-                    )
                     .setFooter({ text: `ขอโดย ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() });
+
+                if (isPlaylist) {
+                    embed
+                        .setTitle('🎶 เพิ่ม Playlist ในคิว')
+                        .setDescription(`**[${result.playlist.title}](${result.playlist.url})**`)
+                        .setThumbnail(result.playlist.thumbnail || track.thumbnail)
+                        .addFields(
+                            { name: '🎵 จำนวนเพลง', value: `${result.tracks.length} เพลง`, inline: true },
+                            { name: '📝 แหล่งที่มา', value: track.source, inline: true },
+                        );
+                } else {
+                    embed
+                        .setTitle('🎵 เพิ่มในคิว')
+                        .setDescription(`**[${track.title}](${track.url})**`)
+                        .setThumbnail(track.thumbnail)
+                        .addFields(
+                            { name: '⏱️ ระยะเวลา', value: track.duration, inline: true },
+                            { name: '👤 ศิลปิน', value: track.author, inline: true },
+                            { name: '📝 แหล่งที่มา', value: track.source, inline: true },
+                        );
+                }
 
                 return interaction.followUp({ embeds: [embed] });
             }
