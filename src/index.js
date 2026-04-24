@@ -79,9 +79,9 @@ const player = new Player(client, {
 });
 
 // Load extractors - v7 uses loadMulti
-// useYoutubeDL: use yt-dlp for streaming (bypasses YouTube's anonymous client blocking)
+// ใช้ InnerTube โดยตรง (ไม่ผ่าน yt-dlp) เพราะ Railway IP ถูก YouTube block สำหรับ yt-dlp audio stream
 await player.extractors.register(YoutubeiExtractor, {
-    useYoutubeDL: true,
+    useYoutubeDL: false,
 });
 await player.extractors.loadMulti(DefaultExtractors);
 
