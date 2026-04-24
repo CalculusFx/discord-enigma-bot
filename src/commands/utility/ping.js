@@ -7,8 +7,8 @@ export default {
         .setDescription('ตรวจสอบการตอบสนองของบอท'),
 
     async execute(interaction, client) {
-        const sent = await interaction.deferReply({ fetchReply: true });
-        
+        await interaction.deferReply();
+        const sent = await interaction.fetchReply();
         const roundtrip = sent.createdTimestamp - interaction.createdTimestamp;
         const wsHeartbeat = client.ws.ping;
 

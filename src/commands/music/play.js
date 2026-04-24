@@ -1,6 +1,9 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { MessageFlags } from 'discord.js';
 import { useMainPlayer } from 'discord-player';
 import config from '../../config.js';
+import { getYtAudioStream } from '../../utils/ytDlpAudio.js';
+import { joinVoiceChannel, createAudioResource, StreamType, createAudioPlayer, AudioPlayerStatus, entersState, VoiceConnectionStatus } from '@discordjs/voice';
 
 export default {
     data: new SlashCommandBuilder()
@@ -19,7 +22,7 @@ export default {
         if (!channel) {
             return interaction.reply({
                 content: '❌ คุณต้องอยู่ในช่องเสียงก่อน!',
-                ephemeral: true,
+                flags: MessageFlags.Ephemeral,
             });
         }
 
@@ -27,14 +30,14 @@ export default {
         if (!permissions.has('Connect') || !permissions.has('Speak')) {
             return interaction.reply({
                 content: '❌ บอทไม่มีสิทธิ์เข้าร่วมหรือพูดในช่องเสียงนี้',
-                ephemeral: true,
+                flags: MessageFlags.Ephemeral,
             });
         }
 
         await interaction.deferReply();
 
         const query = interaction.options.getString('query');
-        const player = useMainPlayer();
+    const player = useMainPlayer();
 
         try {
             // v7 API
@@ -42,41 +45,111 @@ export default {
                 requestedBy: interaction.user,
             });
 
-            if (!result || !result.tracks || result.tracks.length === 0) {
-                return interaction.followUp({
-                    content: `❌ ไม่พบเพลง: **${query}**`,
-                });
+            let track;
+            if (result && result.tracks && result.tracks.length > 0) {
+                // ปกติใช้ discord-player
+                ({ track } = await player.play(channel, result, {
+                    nodeOptions: {
+                        metadata: {
+                            channel: interaction.channel,
+                            client: interaction.guild.members.me,
+                            requestedBy: interaction.user,
+                        },
+                        volume: config.defaultVolume,
+                        leaveOnEmpty: false,
+                        leaveOnEmptyCooldown: config.music.leaveOnEmptyCooldown,
+                        leaveOnEnd: false,
+                        leaveOnEndCooldown: config.music.leaveOnEndCooldown,
+                        bufferingTimeout: 60000,
+                        selfDeaf: true,
+                    },
+                }));
             }
 
-            const { track } = await player.play(channel, result, {
-                nodeOptions: {
-                    metadata: {
-                        channel: interaction.channel,
-                        client: interaction.guild.members.me,
-                        requestedBy: interaction.user,
-                    },
-                    volume: config.defaultVolume,
-                    leaveOnEmpty: config.music.leaveOnEmpty,
-                    leaveOnEmptyCooldown: config.music.leaveOnEmptyCooldown,
-                    leaveOnEnd: config.music.leaveOnEnd,
-                    leaveOnEndCooldown: config.music.leaveOnEndCooldown,
-                    selfDeaf: true,
-                },
-            });
+            // Fallback: ถ้า track ไม่มีเสียงหรือเล่นไม่ได้ (เฉพาะ YouTube)
+            if (!track && (query.includes('youtube.com') || query.includes('youtu.be'))) {
+                try {
+                    // เชื่อมต่อ voice channel
+                    const connection = joinVoiceChannel({
+                        channelId: channel.id,
+                        guildId: channel.guild.id,
+                        adapterCreator: channel.guild.voiceAdapterCreator,
+                    });
 
-            const embed = new EmbedBuilder()
-                .setColor(config.colors.music)
-                .setTitle('🎵 เพิ่มในคิว')
-                .setDescription(`**[${track.title}](${track.url})**`)
-                .setThumbnail(track.thumbnail)
-                .addFields(
-                    { name: '⏱️ ระยะเวลา', value: track.duration, inline: true },
-                    { name: '👤 ศิลปิน', value: track.author, inline: true },
-                    { name: '📝 แหล่งที่มา', value: track.source, inline: true },
-                )
-                .setFooter({ text: `ขอโดย ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() });
+                    // รอ connection พร้อม
+                    await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
 
-            return interaction.followUp({ embeds: [embed] });
+                    // สร้าง audio resource จาก yt-dlp stream
+                    // Fallback: ทดสอบเล่นไฟล์ local ก่อน (test.mp3)
+                    const fs = await import('fs');
+                    const path = './test.mp3';
+                    let resource;
+                    if (fs.existsSync(path)) {
+                        console.log('[Music Fallback Debug]: Playing local file test.mp3');
+                        resource = createAudioResource(fs.createReadStream(path), { inputType: StreamType.Arbitrary });
+                    } else {
+                        // ถ้าไม่มีไฟล์ local ให้ใช้ yt-dlp/ffmpeg stream
+                        const audioStream = getYtAudioStream(query);
+                        console.log('[Music Fallback Debug]: audioStream typeof:', typeof audioStream);
+                        if (!audioStream || typeof audioStream.read !== 'function') {
+                            console.error('[Music Fallback Debug]: audioStream is not a readable stream!');
+                        }
+                        audioStream.on('error', (err) => {
+                            console.error('[Music Fallback Debug]: audioStream error:', err);
+                        });
+                        audioStream.on('close', () => {
+                            console.warn('[Music Fallback Debug]: audioStream closed!');
+                        });
+                        resource = createAudioResource(audioStream, { inputType: StreamType.Opus });
+                        if (resource.playStream) {
+                            resource.playStream.on('error', (err) => {
+                                console.error('[Music Fallback Debug]: AudioResource playStream error:', err);
+                            });
+                            resource.playStream.on('close', () => {
+                                console.warn('[Music Fallback Debug]: AudioResource playStream closed!');
+                            });
+                        }
+                    }
+                    const audioPlayer = createAudioPlayer();
+                    audioPlayer.on('error', (err) => {
+                        console.error('[Music Fallback Debug]: audioPlayer error:', err);
+                    });
+                    audioPlayer.play(resource);
+                    connection.subscribe(audioPlayer);
+
+                    // แจ้งเตือน fallback
+                    await interaction.followUp({
+                        content: `⚠️ ไม่สามารถเล่นเพลงนี้ด้วยระบบปกติ กำลังใช้ fallback yt-dlp stream...`,
+                    });
+
+                    // destroy connection เมื่อเล่นจบ
+                    audioPlayer.on(AudioPlayerStatus.Idle, () => {
+                        connection.destroy();
+                    });
+                } catch (err) {
+                    return interaction.followUp({
+                        content: `❌ ไม่สามารถเล่นเพลงนี้ได้: **${query}**\n\nสาเหตุที่เป็นไปได้:\n- เพลงถูกลิขสิทธิ์หรือ geo-block\n- เพลงเป็น official MV หรือมี DRM\n- ข้อจำกัดของ YouTube/Discord-player\n- หรือเพลงนี้ไม่รองรับ extractor ปัจจุบัน\n\nลองเลือกเพลงอื่นหรือใช้ลิงก์จากแหล่งอื่น เช่น SoundCloud, Spotify`,
+                    });
+                }
+            } else if (!track) {
+                return interaction.followUp({
+                    content: `❌ ไม่สามารถเล่นเพลงนี้ได้: **${query}**\n\nสาเหตุที่เป็นไปได้:\n- เพลงถูกลิขสิทธิ์หรือ geo-block\n- เพลงเป็น official MV หรือมี DRM\n- ข้อจำกัดของ YouTube/Discord-player\n- หรือเพลงนี้ไม่รองรับ extractor ปัจจุบัน\n\nลองเลือกเพลงอื่นหรือใช้ลิงก์จากแหล่งอื่น เช่น SoundCloud, Spotify`,
+                });
+            } else {
+                const embed = new EmbedBuilder()
+                    .setColor(config.colors.music)
+                    .setTitle('🎵 เพิ่มในคิว')
+                    .setDescription(`**[${track.title}](${track.url})**`)
+                    .setThumbnail(track.thumbnail)
+                    .addFields(
+                        { name: '⏱️ ระยะเวลา', value: track.duration, inline: true },
+                        { name: '👤 ศิลปิน', value: track.author, inline: true },
+                        { name: '📝 แหล่งที่มา', value: track.source, inline: true },
+                    )
+                    .setFooter({ text: `ขอโดย ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() });
+
+                return interaction.followUp({ embeds: [embed] });
+            }
 
         } catch (error) {
             console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');

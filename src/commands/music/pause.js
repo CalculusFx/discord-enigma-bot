@@ -1,3 +1,4 @@
+import { MessageFlags } from 'discord.js';
 import { SlashCommandBuilder } from 'discord.js';
 import { useQueue } from 'discord-player';
 
@@ -12,14 +13,14 @@ export default {
         if (!queue || !queue || !queue.currentTrack) {
             return interaction.reply({
                 content: '❌ ไม่มีเพลงกำลังเล่นอยู่',
-                ephemeral: true,
+                flags: MessageFlags.Ephemeral,
             });
         }
 
         if (queue.node.isPaused()) {
             return interaction.reply({
                 content: '❌ เพลงถูกหยุดชั่วคราวอยู่แล้ว',
-                ephemeral: true,
+                flags: MessageFlags.Ephemeral,
             });
         }
 

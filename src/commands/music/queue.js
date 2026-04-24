@@ -18,7 +18,7 @@ export default {
         if (!queue || !queue || !queue.currentTrack) {
             return interaction.reply({
                 content: '❌ ไม่มีเพลงในคิว',
-                ephemeral: true,
+                flags: MessageFlags.Ephemeral,
             });
         }
 

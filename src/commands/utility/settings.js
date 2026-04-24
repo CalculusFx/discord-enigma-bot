@@ -1,3 +1,4 @@
+import { MessageFlags } from 'discord.js';
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
 import { updateGuildSettings, getGuildSettings } from '../../services/database.js';
 import config from '../../config.js';
@@ -30,6 +31,11 @@ export default {
                     option.setName('enabled')
                         .setDescription('เปิด/ปิด Moderation')
                         .setRequired(true)
+                )
+                .addBooleanOption(option =>
+                    option.setName('repetition_enabled')
+                        .setDescription('เปิด/ปิดการบังคับใช้กฎการพิมพ์ซ้ำ (repetition)')
+                        .setRequired(false)
                 )
         )
         .addSubcommand(subcommand =>
@@ -85,7 +91,7 @@ export default {
                         { name: '📝 Log Channel', value: settings.log_channel_id ? `<#${settings.log_channel_id}>` : 'ไม่ได้ตั้งค่า', inline: true },
                     );
 
-                return interaction.reply({ embeds: [embed], ephemeral: true });
+                return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
             }
 
             case 'tts': {
@@ -99,22 +105,24 @@ export default {
 
                 return interaction.reply({
                     content: `🔊 TTS ${enabled ? 'เปิด' : 'ปิด'}แล้ว`,
-                    ephemeral: true,
+                    flags: MessageFlags.Ephemeral,
                 });
             }
 
             case 'moderation': {
                 const enabled = interaction.options.getBoolean('enabled');
+                const repetitionEnabled = interaction.options.getBoolean('repetition_enabled');
                 updateGuildSettings(guildId, {
                     ttsEnabled: settings.tts_enabled ?? true,
                     moderationEnabled: enabled,
+                    repetitionEnabled: typeof repetitionEnabled === 'boolean' ? repetitionEnabled : (settings.moderation_repetition === 1 || settings.moderation_repetition === true),
                     logChannelId: settings.log_channel_id,
                     ttsLanguage: settings.tts_language || 'th',
                 });
 
                 return interaction.reply({
                     content: `🛡️ Moderation ${enabled ? 'เปิด' : 'ปิด'}แล้ว`,
-                    ephemeral: true,
+                    flags: MessageFlags.Ephemeral,
                 });
             }
 
@@ -129,7 +137,7 @@ export default {
 
                 return interaction.reply({
                     content: `📝 ตั้งค่าช่องแจ้งเตือนเป็น ${channel}`,
-                    ephemeral: true,
+                    flags: MessageFlags.Ephemeral,
                 });
             }
 
@@ -146,7 +154,7 @@ export default {
 
                 return interaction.reply({
                     content: `🌐 ตั้งค่าภาษา TTS เป็น **${language}**`,
-                    ephemeral: true,
+                    flags: MessageFlags.Ephemeral,
                 });
             }
         }

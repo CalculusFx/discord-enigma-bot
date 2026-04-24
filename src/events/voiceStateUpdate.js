@@ -15,12 +15,14 @@ export default {
         // User joined a voice channel
         if (!oldState.channelId && newState.channelId) {
             const channel = newState.channel;
+            console.log('[VOICE] join event for', member.user.id, 'displayName=', displayName, 'username=', member.user.username, 'channel=', channel?.id);
             await client.ttsService.announceJoin(channel, displayName);
         }
         
         // User left a voice channel
         else if (oldState.channelId && !newState.channelId) {
             const channel = oldState.channel;
+            console.log('[VOICE] leave event for', member.user.id, 'displayName=', displayName, 'username=', member.user.username, 'channel=', channel?.id);
             await client.ttsService.announceLeave(channel, displayName);
         }
         
@@ -29,6 +31,7 @@ export default {
             const oldChannel = oldState.channel;
             const newChannel = newState.channel;
             
+            console.log('[VOICE] move event for', member.user.id, 'displayName=', displayName, 'username=', member.user.username, 'from=', oldChannel?.id, 'to=', newChannel?.id);
             await client.ttsService.announceLeave(oldChannel, displayName);
             await client.ttsService.announceJoin(newChannel, displayName);
         }

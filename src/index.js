@@ -1,6 +1,10 @@
+// Apply timer clamp polyfill early to avoid Node TimeoutNegativeWarning from negative timeouts
+import './polyfills/timerClamp.js';
+
 // CRITICAL: Import encryption libraries BEFORE discord.js
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
+import '@discord-player/ffmpeg';
 
 // Force load all encryption libraries
 try { require('sodium-native'); } catch(e) {}
@@ -21,6 +25,9 @@ import config from './config.js';
 import { initDatabase } from './services/database.js';
 import { ModerationService } from './services/moderation/moderationService.js';
 import { TTSService } from './services/tts/ttsService.js';
+import dotenv from 'dotenv';
+dotenv.config();
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -43,6 +50,10 @@ client.cooldowns = new Collection();
 
 // Initialize services
 client.moderationService = new ModerationService();
+// provide client reference for moderation notifications
+if (client.moderationService && typeof client.moderationService.setClient === 'function') {
+    client.moderationService.setClient(client);
+}
 client.ttsService = new TTSService();
 
 // Initialize music player (v7)
@@ -55,7 +66,10 @@ const player = new Player(client, {
 });
 
 // Load extractors - v7 uses loadMulti
-await player.extractors.register(YoutubeiExtractor, {});
+// useYoutubeDL: use yt-dlp for streaming (bypasses YouTube's anonymous client blocking)
+await player.extractors.register(YoutubeiExtractor, {
+    useYoutubeDL: true,
+});
 await player.extractors.loadMulti(DefaultExtractors);
 
 client.player = player;
