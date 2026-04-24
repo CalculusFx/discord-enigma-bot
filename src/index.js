@@ -14,6 +14,28 @@ if (!process.env.YOUTUBE_DL_DIR) {
     } catch { console.warn('[yt-dlp] Could not auto-detect path, using default'); }
 }
 
+// Write YouTube cookies file and yt-dlp config if YOUTUBE_COOKIES env var is set
+if (process.env.YOUTUBE_COOKIES) {
+    try {
+        const { mkdirSync, writeFileSync } = await import('fs');
+        const { homedir } = await import('os');
+        const { join: pathJoin } = await import('path');
+
+        const cookiesPath = '/app/data/yt_cookies.txt';
+        const cookiesContent = Buffer.from(process.env.YOUTUBE_COOKIES, 'base64').toString('utf8');
+        writeFileSync(cookiesPath, cookiesContent);
+
+        // Write yt-dlp config so all calls auto-use cookies
+        const configDir = pathJoin(homedir(), '.config', 'yt-dlp');
+        mkdirSync(configDir, { recursive: true });
+        writeFileSync(pathJoin(configDir, 'config'), `--cookies ${cookiesPath}\n`);
+
+        console.log('[yt-dlp] Cookies configured from YOUTUBE_COOKIES env var');
+    } catch (e) {
+        console.warn('[yt-dlp] Failed to write cookies:', e.message);
+    }
+}
+
 // CRITICAL: Import encryption libraries BEFORE discord.js
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -81,10 +103,7 @@ const player = new Player(client, {
 // Load extractors - v7 uses loadMulti
 // ใช้ InnerTube โดยตรง (ไม่ผ่าน yt-dlp) เพราะ Railway IP ถูก YouTube block สำหรับ yt-dlp audio stream
 await player.extractors.register(YoutubeiExtractor, {
-    useYoutubeDL: false,
-    streamOptions: {
-        useClient: 'IOS',
-    },
+    useYoutubeDL: true,
 });
 await player.extractors.loadMulti(DefaultExtractors);
 
