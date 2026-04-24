@@ -1,6 +1,19 @@
 // Apply timer clamp polyfill early to avoid Node TimeoutNegativeWarning from negative timeouts
 import './polyfills/timerClamp.js';
 
+// Auto-detect yt-dlp path so youtube-dl-exec finds it on any platform (Railway/Linux/macOS)
+if (!process.env.YOUTUBE_DL_DIR) {
+    try {
+        const { execSync } = await import('child_process');
+        const ytdlpPath = execSync('which yt-dlp 2>/dev/null || command -v yt-dlp 2>/dev/null').toString().trim();
+        if (ytdlpPath) {
+            const { dirname } = await import('path');
+            process.env.YOUTUBE_DL_DIR = dirname(ytdlpPath);
+            console.log('[yt-dlp] Auto-detected path:', process.env.YOUTUBE_DL_DIR);
+        }
+    } catch { console.warn('[yt-dlp] Could not auto-detect path, using default'); }
+}
+
 // CRITICAL: Import encryption libraries BEFORE discord.js
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
