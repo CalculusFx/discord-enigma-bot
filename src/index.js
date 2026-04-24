@@ -82,6 +82,9 @@ const player = new Player(client, {
 // ใช้ InnerTube โดยตรง (ไม่ผ่าน yt-dlp) เพราะ Railway IP ถูก YouTube block สำหรับ yt-dlp audio stream
 await player.extractors.register(YoutubeiExtractor, {
     useYoutubeDL: false,
+    streamOptions: {
+        useClient: 'IOS',
+    },
 });
 await player.extractors.loadMulti(DefaultExtractors);
 
