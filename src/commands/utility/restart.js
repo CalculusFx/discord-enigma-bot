@@ -1,20 +1,29 @@
-import { SlashCommandBuilder, EmbedBuilder, PermissionsBitField, ChannelType, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, ChannelType, MessageFlags } from 'discord.js';
 import config from '../../config.js';
 import { TTSService } from '../../services/tts/ttsService.js';
 
 export default {
     data: new SlashCommandBuilder()
         .setName('announce-restart')
-        .setDescription('ประกาศว่าบอทกำลังรีสตาร์ท (สำหรับผู้ดูแล)')
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+        .setDescription('ประกาศข้อความผ่านเสียงในห้อง (สำหรับผู้ดูแล)')
+        .addStringOption(opt =>
+            opt.setName('password')
+                .setDescription('รหัสผ่าน admin')
+                .setRequired(true)
+        )
+        .addStringOption(opt =>
+            opt.setName('message')
+                .setDescription('ข้อความที่ต้องการประกาศ (ถ้าไม่ใส่จะใช้ข้อความ default)')
+                .setRequired(false)
+        ),
 
     async execute(interaction) {
-        // permission is declared on the command, but double-check at runtime
-        if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.reply({ content: 'คุณไม่มีสิทธิ์ใช้คำสั่งนี้', flags: MessageFlags.Ephemeral });
+        const password = interaction.options.getString('password');
+        if (password !== config.admin.password) {
+            return interaction.reply({ content: '❌ รหัสผ่านไม่ถูกต้อง', flags: MessageFlags.Ephemeral });
         }
 
-        const text = 'Enigma Bot Online Standby รอรับคำสั่ง';
+        const text = interaction.options.getString('message') || 'Enigma Bot Online Standby รอรับคำสั่ง';
         // const text = 'แจ้งเตือนระดับ 3 : ตรวจพบการทำงานผิดปกติ รหัสข้อผิดพลาด E-401 , E-504 , E-999 ไม่สามารถรีสตาร์ทได้ กรุณาติดต่อผู้ดูแลระบบเพื่อแก้ไขปัญหา';
         // const text = 'Moderation Restart Successful';
         // const text = 'Moderation Enigma Bot System is restarting, please wait...';

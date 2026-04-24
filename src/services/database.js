@@ -233,7 +233,7 @@ export function getGuildTTSSettings(guildId) {
     // default structure
     const s = db.guildSettings[guildId];
     return {
-        enabled: s.tts_enabled === 1 || s.tts_enabled === true || false,
+        enabled: s.tts_enabled === undefined ? true : (s.tts_enabled === 1 || s.tts_enabled === true),
         language: s.tts_language || null,
         disabledChannels: s.tts_disabled_channels || [] // array of channel ids
     };
