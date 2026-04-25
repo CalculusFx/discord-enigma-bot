@@ -96,7 +96,11 @@ export default {
                 if (!track.url || (!track.url.includes('youtube.com') && !track.url.includes('youtu.be'))) return null;
                 const ytdlp = getYtdlpPath();
                 const cookiesPath = '/app/data/yt_cookies.txt';
-                const args = ['-f', 'bestaudio[ext=webm]/bestaudio/best', '--no-playlist', '-o', '-', '--quiet'];
+                const args = [
+                    '-f', 'bestaudio[ext=webm]/bestaudio/best',
+                    '--no-playlist', '-o', '-', '--quiet', '--no-update',
+                    '--extractor-args', 'youtube:player_client=web,web_embedded',
+                ];
                 if (existsSync(cookiesPath)) args.push('--cookies', cookiesPath);
                 args.push(track.url);
                 const proc = spawn(ytdlp, args, { stdio: ['ignore', 'pipe', 'pipe'] });
