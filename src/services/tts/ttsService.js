@@ -40,7 +40,7 @@ export class TTSService {
     this.openai = null;
 
     // voice selection
-    const allowedVoices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+    const allowedVoices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer', 'coral'];
     const gender = (config.tts.gender || 'male').toLowerCase();
     if (config.tts.voice && allowedVoices.includes(config.tts.voice)) {
       this.voice = config.tts.voice;
@@ -143,7 +143,7 @@ export class TTSService {
     const member = channel.guild?.members?.cache?.find(m => this.cleanUsername(m.displayName) === this.cleanUsername(username)) || null;
     const fallback = member?.user?.username || null;
     const cleanName = this.sanitizeDisplayName(username, fallback);
-    const text = `ยินดีต้อนรับ! ${cleanName} เข้าร่วมห้องเสียงครับ`;
+    const text = `ยินดีต้อนรับ! ${cleanName} เข้าร่วมห้องเสียง`;
     console.log('[TTS] announceJoin → speak:', JSON.stringify(text), 'channel:', channel.id);
     await this.speak(channel, text);
   }
@@ -153,7 +153,7 @@ export class TTSService {
     const member = channel.guild?.members?.cache?.find(m => this.cleanUsername(m.displayName) === this.cleanUsername(username)) || null;
     const fallback = member?.user?.username || null;
     const cleanName = this.sanitizeDisplayName(username, fallback);
-    const text = `${cleanName} ออกจากห้องเสียงแล้วครับ`;
+    const text = `${cleanName} ออกจากห้องเสียงแล้ว`;
     console.log('[TTS] announceLeave → speak:', JSON.stringify(text), 'channel:', channel.id);
     await this.speak(channel, text);
   }
