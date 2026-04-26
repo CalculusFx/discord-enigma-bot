@@ -5,7 +5,6 @@ import config from '../../config.js';
 import { getYtAudioStream } from '../../utils/ytDlpAudio.js';
 import { joinVoiceChannel, createAudioResource, StreamType, createAudioPlayer, AudioPlayerStatus, entersState, VoiceConnectionStatus } from '@discordjs/voice';
 import { spawn } from 'child_process';
-import { existsSync } from 'fs';
 
 function getYtdlpPath() {
     return process.env.YOUTUBE_DL_DIR ? `${process.env.YOUTUBE_DL_DIR}/yt-dlp` : 'yt-dlp';
@@ -92,22 +91,6 @@ export default {
             leaveOnEndCooldown: config.music.leaveOnEndCooldown,
             bufferingTimeout: 60000,
             selfDeaf: true,
-            onBeforeCreateStream: async (track) => {
-                if (!track.url || (!track.url.includes('youtube.com') && !track.url.includes('youtu.be'))) return null;
-                const ytdlp = getYtdlpPath();
-                const cookiesPath = '/app/data/yt_cookies.txt';
-                const args = [
-                    '-f', 'bestaudio[ext=webm]/bestaudio/best',
-                    '--no-playlist', '-o', '-', '--quiet', '--no-update',
-                    '--extractor-args', 'youtube:player_client=web,web_embedded',
-                ];
-                if (existsSync(cookiesPath)) args.push('--cookies', cookiesPath);
-                args.push(track.url);
-                const proc = spawn(ytdlp, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-                proc.stderr.on('data', d => console.log('[yt-dlp stream]', d.toString().trim()));
-                proc.on('error', err => console.error('[yt-dlp stream error]', err));
-                return proc.stdout;
-            },
         };
 
         const isPlaylistUrl = /[?&]list=|\/playlist\?/.test(query);
