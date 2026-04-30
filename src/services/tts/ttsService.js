@@ -1,5 +1,6 @@
 import {
   joinVoiceChannel,
+  getVoiceConnection,
   createAudioPlayer,
   createAudioResource,
   AudioPlayerStatus,
@@ -195,10 +196,17 @@ export class TTSService {
     const joinTimeout = Number(config.tts.joinTimeoutMs) || 10000;
     const maxRetries = Number(config.tts.joinRetries) || 3;
 
+    const BAD_STATES = [VoiceConnectionStatus.Destroyed, VoiceConnectionStatus.Disconnected];
+
+    // ยืม connection เดิมถ้ามีอยู่แล้ว (เช่น music player กำลังเล่น) — ไม่ join ใหม่เพื่อไม่รบกวน
+    const globalConn = getVoiceConnection(guildId);
+    if (globalConn && !BAD_STATES.includes(globalConn.state.status)) {
+      this.connections.set(channelId, globalConn);
+      return globalConn;
+    }
+
     let connection = this.connections.get(channelId);
     let lastErr = null;
-
-    const BAD_STATES = [VoiceConnectionStatus.Destroyed, VoiceConnectionStatus.Disconnected];
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       if (!connection || BAD_STATES.includes(connection.state.status)) {
@@ -207,7 +215,8 @@ export class TTSService {
             channelId: channel.id,
             guildId,
             adapterCreator: channel.guild.voiceAdapterCreator,
-            selfDeaf: false,
+            selfDeaf: true,
+            selfMute: false,
           });
           this.connections.set(channelId, connection);
         } catch (err) {
@@ -272,6 +281,12 @@ export class TTSService {
 
       const musicQueue = channel.guild.client.player?.nodes?.cache?.get(guildId);
       const wasPlaying = musicQueue?.isPlaying();
+
+      // ตรวจก่อนว่าจะ borrow connection เดิมหรือเปล่า (เพื่อตัดสินใจตอน cleanup)
+      const BAD_CONN_STATES = [VoiceConnectionStatus.Destroyed, VoiceConnectionStatus.Disconnected];
+      const existingConn = getVoiceConnection(guildId);
+      const borrowed = !!(existingConn && !BAD_CONN_STATES.includes(existingConn.state.status));
+
       if (wasPlaying) {
         musicQueue.node.pause();
         console.log('[TTS] Paused music for announcement');
@@ -307,14 +322,22 @@ export class TTSService {
           console.log('[TTS] Player done, reason:', reason);
           try { if (existsSync(filepath)) unlinkSync(filepath); } catch {}
           if (wasPlaying && musicQueue) {
+            // Re-subscribe music player's audio player กลับก่อน แล้วค่อย resume
+            try {
+              const dpPlayer = musicQueue.dispatcher?.audioPlayer;
+              if (dpPlayer) {
+                connection.subscribe(dpPlayer);
+                console.log('[TTS] Re-subscribed music player to connection');
+              }
+            } catch {}
             setTimeout(() => {
               if (musicQueue.node.isPaused()) {
                 musicQueue.node.resume();
                 console.log('[TTS] Resumed music after announcement');
               }
             }, 300);
-          } else {
-            // ออกจาก voice channel ทันทีหลังอ่านจบ
+          } else if (!borrowed) {
+            // ออกจาก voice channel ทันทีหลังอ่านจบ (เฉพาะ connection ที่ TTS สร้างเอง)
             const conn = this.connections.get(channelId);
             if (conn && conn.state.status !== VoiceConnectionStatus.Destroyed) {
               conn.destroy();
@@ -334,7 +357,6 @@ export class TTSService {
 
         player.once('error', error => {
           console.error('[TTS] Player error:', error?.message || error);
-          if (wasPlaying && musicQueue) musicQueue.node.resume();
           cleanup('error');
         });
 
