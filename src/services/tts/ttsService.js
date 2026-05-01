@@ -6,7 +6,7 @@ import {
   AudioPlayerStatus,
   VoiceConnectionStatus,
   entersState,
-} from '@discordjs/voice';
+} from 'discord-voip';
 import OpenAI from 'openai';
 import { createWriteStream, unlinkSync, existsSync, mkdirSync } from 'fs';
 import { promises as fsPromises } from 'fs';
@@ -337,12 +337,8 @@ export class TTSService {
               }
             }, 300);
           } else if (!borrowed) {
-            // ออกจาก voice channel ทันทีหลังอ่านจบ (เฉพาะ connection ที่ TTS สร้างเอง)
-            const conn = this.connections.get(channelId);
-            if (conn && conn.state.status !== VoiceConnectionStatus.Destroyed) {
-              conn.destroy();
-              this.connections.delete(channelId);
-            }
+            // รอ 30 วินาทีก่อน disconnect — ถ้ามีคนเข้าออกถี่ๆ จะได้ใช้ connection เดิม ไม่ต้อง destroy/create ซ้ำ
+            this._scheduleDisconnect(channelId, guildId, channel.guild.client);
           }
           resolve();
         };

@@ -3,7 +3,7 @@ import { MessageFlags } from 'discord.js';
 import { useMainPlayer, useQueue } from 'discord-player';
 import config from '../../config.js';
 import { getYtAudioStream } from '../../utils/ytDlpAudio.js';
-import { joinVoiceChannel, createAudioResource, StreamType, createAudioPlayer, AudioPlayerStatus, entersState, VoiceConnectionStatus } from '@discordjs/voice';
+import { joinVoiceChannel, createAudioResource, StreamType, createAudioPlayer, AudioPlayerStatus, entersState, VoiceConnectionStatus } from 'discord-voip';
 import { spawn } from 'child_process';
 
 function getYtdlpPath() {
