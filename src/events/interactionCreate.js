@@ -3,6 +3,7 @@ import { Events } from 'discord.js';
 import { pending, removeRequest } from '../services/roleApprovalService.js';
 
 const CEO_ROLES = ['⁺₊✧ CEO ✧⁺₊', 'admin'];
+const APPROVER_ROLES = ['⁺₊✧ CEO ✧⁺₊', 'admin ⁺₊✧', '✩‧₊˚ แม่บ้าน ✩‧₊˚'];
 
 export default {
     name: Events.InteractionCreate,
@@ -64,6 +65,67 @@ export default {
                         });
 
                         if (requester) await requester.send(`❌ คำขอสร้าง role **${req.roleName}** ถูกปฏิเสธโดย CEO ครับ`).catch(() => null);
+                    }
+                    return;
+                }
+
+                // ── Role assignment approval buttons ──────────────────────
+                if (idRaw.startsWith('assign_approve:') || idRaw.startsWith('assign_deny:')) {
+                    const isApprover = interaction.member?.roles?.cache?.some(r => APPROVER_ROLES.includes(r.name)) ?? false;
+                    if (!isApprover) {
+                        return interaction.reply({ content: '❌ เฉพาะ CEO / admin / แม่บ้าน เท่านั้นที่อนุมัติได้', flags: MessageFlags.Ephemeral });
+                    }
+
+                    const [action, requestId] = idRaw.split(':');
+                    const req = pending.get(requestId);
+
+                    if (!req) {
+                        return interaction.reply({ content: '⚠️ ไม่พบคำขอนี้ อาจถูกจัดการไปแล้ว', flags: MessageFlags.Ephemeral });
+                    }
+
+                    const guild = client.guilds.cache.get(req.guildId) ?? await client.guilds.fetch(req.guildId).catch(() => null);
+                    const requester = await client.users.fetch(req.requesterId).catch(() => null);
+
+                    const disabledRow = interaction.message.components.map(r => ({
+                        ...r.toJSON(), components: r.toJSON().components.map(c => ({ ...c, disabled: true }))
+                    }));
+
+                    if (action === 'assign_approve') {
+                        let assignOk = false;
+                        try {
+                            const guildMember = await guild.members.fetch(req.requesterId);
+                            await guildMember.roles.add(req.roleId, `อนุมัติโดย ${interaction.user.tag}`);
+                            assignOk = true;
+                        } catch (err) {
+                            console.error('[RoleAssign] assign error:', err);
+                        }
+
+                        removeRequest(requestId);
+
+                        await interaction.update({
+                            embeds: [{ ...interaction.message.embeds[0].toJSON(), color: 0x57F287, footer: { text: `✅ อนุมัติโดย ${interaction.user.tag}` } }],
+                            components: disabledRow,
+                        });
+
+                        if (requester) {
+                            await requester.send(
+                                assignOk
+                                    ? `✅ คำขอยศ **${req.roleName}** ของคุณได้รับการอนุมัติแล้ว`
+                                    : `⚠️ คำขอยศ **${req.roleName}** ได้รับการอนุมัติ แต่ไม่สามารถมอบยศให้ได้ กรุณาแจ้ง admin`
+                            ).catch(() => null);
+                        }
+
+                    } else {
+                        removeRequest(requestId);
+
+                        await interaction.update({
+                            embeds: [{ ...interaction.message.embeds[0].toJSON(), color: 0xED4245, footer: { text: `❌ ปฏิเสธโดย ${interaction.user.tag}` } }],
+                            components: disabledRow,
+                        });
+
+                        if (requester) {
+                            await requester.send(`❌ คำขอยศ **${req.roleName}** ถูกปฏิเสธโดย admin`).catch(() => null);
+                        }
                     }
                     return;
                 }
