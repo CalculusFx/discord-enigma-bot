@@ -38,6 +38,7 @@ import config from './config.js';
 import { initDatabase } from './services/database.js';
 import { ModerationService } from './services/moderation/moderationService.js';
 import { TTSService } from './services/tts/ttsService.js';
+import { setReporterClient, report } from './utils/errorReporter.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -60,6 +61,9 @@ const client = new Client({
 // Initialize collections
 client.commands = new Collection();
 client.cooldowns = new Collection();
+
+client.on('error', err => report('error', 'DiscordClient', err));
+client.on('warn', msg => report('warn', 'DiscordClient', msg));
 
 // Initialize services
 client.moderationService = new ModerationService();
@@ -157,32 +161,22 @@ player.events.on('emptyQueue', (queue) => {
 });
 
 player.events.on('error', (queue, error) => {
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('❌ PLAYER ERROR EVENT:');
-    console.error('Error Message:', error.message);
-    console.error('Error Name:', error.name);
-    console.error('Error Code:', error.code);
-    console.error('Error Stack:', error.stack);
-    console.error('Queue Guild:', queue?.guild?.name);
-    console.error('Current Track:', queue?.currentTrack?.title);
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    
+    console.error('❌ PLAYER ERROR:', error.message);
+    report('error', 'PlayerError', error, {
+        'Guild': queue?.guild?.name ?? '-',
+        'Track': queue?.currentTrack?.title ?? '-',
+    });
     if (queue?.metadata?.channel) {
         queue.metadata.channel.send(`❌ เกิดข้อผิดพลาด: ${error.message}`).catch(() => {});
     }
 });
 
 player.events.on('playerError', (queue, error) => {
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('❌ PLAYER ERROR (playerError event):');
-    console.error('Error Message:', error.message);
-    console.error('Error Name:', error.name);
-    console.error('Error Code:', error.code);
-    console.error('Error Stack:', error.stack);
-    console.error('Queue Guild:', queue?.guild?.name);
-    console.error('Current Track:', queue?.currentTrack?.title);
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    
+    console.error('❌ PLAYER ERROR (playerError):', error.message);
+    report('error', 'PlayerError', error, {
+        'Guild': queue?.guild?.name ?? '-',
+        'Track': queue?.currentTrack?.title ?? '-',
+    });
     if (queue?.metadata?.channel) {
         queue.metadata.channel.send(`❌ เกิดข้อผิดพลาดในการเล่นเพลง: ${error.message}`).catch(() => {});
     }
@@ -207,19 +201,28 @@ player.events.on('disconnect', (queue) => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 });
 
+process.on('uncaughtException', err => {
+    console.error('uncaughtException:', err);
+    report('error', 'UncaughtException', err);
+});
+
+process.on('unhandledRejection', reason => {
+    const err = reason instanceof Error ? reason : new Error(String(reason));
+    console.error('unhandledRejection:', err);
+    report('error', 'UnhandledRejection', err);
+});
+
 // Initialize and start
 async function start() {
     try {
-        // Initialize database
         await initDatabase();
         console.log('✅ Database initialized');
 
-        // Load commands and events
         await loadCommands();
         await loadEvents();
 
-        // Login
         await client.login(config.token);
+        setReporterClient(client);
     } catch (error) {
         console.error('Failed to start bot:', error);
         process.exit(1);

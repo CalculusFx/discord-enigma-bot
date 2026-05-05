@@ -1,6 +1,7 @@
 import { MessageFlags } from 'discord.js';
 import { Events } from 'discord.js';
 import { pending, removeRequest } from '../services/roleApprovalService.js';
+import { report } from '../utils/errorReporter.js';
 
 const CEO_ROLES = ['⁺₊✧ CEO ✧⁺₊', 'admin'];
 const APPROVER_ROLES = ['⁺₊✧ CEO ✧⁺₊', 'admin ⁺₊✧', '✩‧₊˚ แม่บ้าน ✩‧₊˚'];
@@ -171,6 +172,7 @@ export default {
                 }
             } catch (err) {
                 console.error('Button interaction error:', err);
+                report('error', 'ButtonInteraction', err);
             }
         }
 
@@ -216,7 +218,11 @@ export default {
             await command.execute(interaction, client);
         } catch (error) {
             console.error(`Error executing ${interaction.commandName}:`, error);
-            
+            report('error', `Command:${interaction.commandName}`, error, {
+                'ผู้ใช้': interaction.user?.tag ?? '-',
+                'Guild': interaction.guild?.name ?? '-',
+            });
+
             const errorMessage = {
                 content: '❌ เกิดข้อผิดพลาดในการทำงานคำสั่งนี้',
                 flags: MessageFlags.Ephemeral,
