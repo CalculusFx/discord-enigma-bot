@@ -10,13 +10,24 @@ function getYtdlpPath() {
     return process.env.YOUTUBE_DL_DIR ? `${process.env.YOUTUBE_DL_DIR}/yt-dlp` : 'yt-dlp';
 }
 
+function buildYtdlpArgs(extraArgs = []) {
+    const args = [
+        '--extractor-args', 'youtube:player_client=tv,web',
+        '--no-update',
+    ];
+    if (process.env.YOUTUBE_COOKIES_FILE) {
+        args.push('--cookies', process.env.YOUTUBE_COOKIES_FILE);
+    }
+    return [...args, ...extraArgs];
+}
+
 // ดึง URL เพลงแรกของ playlist อย่างรวดเร็ว (ไม่โหลด metadata ทั้งหมด)
 function getFirstPlaylistTrackUrl(playlistUrl) {
     return new Promise((resolve, reject) => {
-        const proc = spawn(getYtdlpPath(), [
+        const proc = spawn(getYtdlpPath(), buildYtdlpArgs([
             '--flat-playlist', '--playlist-items', '1',
             '--print', 'webpage_url', '--no-warnings', playlistUrl,
-        ]);
+        ]));
         let out = '';
         proc.stdout.on('data', d => { out += d.toString(); });
         proc.on('close', () => {

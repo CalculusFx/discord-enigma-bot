@@ -1,18 +1,27 @@
 import { spawn } from 'child_process';
 
+function buildYtdlpArgs(extraArgs = []) {
+    const args = [
+        '--extractor-args', 'youtube:player_client=tv,web',
+        '--no-update',
+    ];
+    if (process.env.YOUTUBE_COOKIES_FILE) {
+        args.push('--cookies', process.env.YOUTUBE_COOKIES_FILE);
+    }
+    return [...args, ...extraArgs];
+}
+
 /**
  * ดึง audio stream จาก YouTube ด้วย yt-dlp
  * @param {string} url - YouTube URL
  * @returns {ReadableStream} - FFmpeg stream สำหรับ Discord
  */
 export function getYtAudioStream(url) {
-    // ใช้ yt-dlp ดึง audio-only stream แล้ว pipe เข้า ffmpeg แปลงเป็น opus
-    // ต้องติดตั้ง yt-dlp และ ffmpeg ในระบบ
-    const ytdlp = spawn('yt-dlp', [
-        '-f', 'bestaudio', // ดึง stream audio ที่ดีที่สุด
-        '-o', '-',        // output เป็น stdout
+    const ytdlp = spawn('yt-dlp', buildYtdlpArgs([
+        '-f', 'bestaudio',
+        '-o', '-',
         url
-    ]);
+    ]));
 
     ytdlp.on('error', (err) => {
         console.error('[ytDlpAudio Debug]: yt-dlp process error:', err);
