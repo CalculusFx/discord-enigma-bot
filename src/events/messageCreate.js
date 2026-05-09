@@ -2,6 +2,8 @@ import { Events, EmbedBuilder } from 'discord.js';
 import config from '../config.js';
 import { getReply, isOnCooldown, isChatAllowed } from '../services/chat/chatService.js';
 
+const SAKURA_LOG_CHANNEL = 'ห้องประชุมซากุระ';
+
 export default {
     name: Events.MessageCreate,
     async execute(message, client) {
@@ -312,6 +314,41 @@ export default {
                         // Helpful debug log to indicate why mod logs may not appear
                         console.warn('[Moderation] No valid log channel found for ID:', config.moderation.logChannelId);
                     }
+                }
+
+                // Log to ห้องประชุมซากุระ
+                try {
+                    const now = new Date();
+                    const thaiDate = now.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+                    const thaiTime = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+                    const allChannels = await message.guild?.channels.fetch().catch(() => null);
+                    const sakuraChannel = allChannels?.find(c => c?.name === SAKURA_LOG_CHANNEL && c.isTextBased?.());
+                    if (sakuraChannel) {
+                        const sakuraEmbed = new EmbedBuilder()
+                            .setColor(config.colors.error)
+                            .setTitle('🚨 ตรวจพบการละเมิดกฎ')
+                            .setThumbnail(message.author.displayAvatarURL())
+                            .addFields(
+                                { name: '👤 ผู้ละเมิด', value: `${message.author.tag}\n<@${message.author.id}>`, inline: true },
+                                { name: '📢 ช่อง', value: `<#${message.channel.id}>`, inline: true },
+                                { name: '​', value: '​', inline: true },
+                                { name: '⚠️ ประเภทการละเมิด', value: result.type, inline: true },
+                                { name: '📋 เหตุผล', value: result.reason, inline: true },
+                                { name: '🔢 ครั้งที่', value: String(occurrences), inline: true },
+                                { name: '🗑️ การดำเนินการ', value: config.moderation.autoDelete ? 'ลบข้อความ' : 'เตือน', inline: true },
+                                { name: '⏱️ โทษ (timeout)', value: timeoutMinutes > 0 ? `${timeoutMinutes} นาที` : '—', inline: true },
+                                { name: '​', value: '​', inline: true },
+                                { name: '💬 เนื้อหา', value: `\`\`\`${message.content.substring(0, 500)}\`\`\``, inline: false },
+                                { name: '📅 วันที่', value: thaiDate, inline: true },
+                                { name: '🕐 เวลา', value: thaiTime, inline: true },
+                            )
+                            .setFooter({ text: `User ID: ${message.author.id}` })
+                            .setTimestamp();
+                        await sakuraChannel.send({ embeds: [sakuraEmbed] });
+                    }
+                } catch (err) {
+                    console.error('[Moderation] ไม่สามารถส่ง log ไปที่ห้องประชุมซากุระ:', err.message);
                 }
 
                 // Learn from this violation (include meta for guild and source)
