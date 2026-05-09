@@ -34,8 +34,9 @@ export class TTSService {
     // initialize runtime state
     this.connections = new Map();
     this.queues = new Map();
+    this.channelRefs = new Map();   // channelId → channel object
+    this.isProcessingQueues = false; // global lock แทน per-channel lock
     this.language = config.tts.language || 'th';
-    this.isSpeaking = new Map();
 
     // runtime-openai client holder (per-call)
     this.openai = null;
@@ -164,29 +165,41 @@ export class TTSService {
     const channelId = channel.id;
 
     if (!this.queues.has(channelId)) this.queues.set(channelId, []);
+    this.channelRefs.set(channelId, channel);
+
     const q = this.queues.get(channelId);
     // ถ้า queue เต็มแล้ว (> 2) ตัดทิ้ง — ไม่งั้นจะค้างอ่านประกาศเก่าเป็นชั่วโมง
     if (q.length >= 2) { console.log('[TTS] queue full, dropping:', text); return; }
     q.push(String(text || ''));
 
-    console.log('[TTS] speak() queued, isSpeaking=', this.isSpeaking.get(channelId), 'queueLen=', q.length);
+    console.log('[TTS] speak() queued channel', channelId, 'isProcessing=', this.isProcessingQueues, 'queueLen=', q.length);
 
-    // ถ้ากำลังพูดอยู่แล้ว ข้อความจะถูก process ต่อโดย while loop ที่กำลังทำงานอยู่
-    if (this.isSpeaking.get(channelId)) return;
+    // ถ้า global processor กำลังทำงานอยู่ มันจะหยิบ item นี้เองในรอบถัดไป
+    if (this.isProcessingQueues) return;
+    this.isProcessingQueues = true;
 
-    // lock ก่อน เพื่อป้องกัน race condition จากการเรียกพร้อมกัน
-    this.isSpeaking.set(channelId, true);
-
-    while ((this.queues.get(channelId) || []).length > 0) {
-      const next = this.queues.get(channelId).shift();
-      try {
-        await this._playTTSOnce(channel, next);
-      } catch (err) {
-        console.error('[TTS] Error playing TTS:', err?.message || err);
+    // วน scan ทุกห้องจนกว่าทุก queue จะว่าง
+    // items ที่ถูก push เข้ามาระหว่าง await จะถูกหยิบในรอบ outer-while ถัดไปเสมอ
+    let found = true;
+    while (found) {
+      found = false;
+      for (const [cId, queue] of this.queues) {
+        if (queue.length === 0) continue;
+        const next = queue.shift();
+        const ch = this.channelRefs.get(cId);
+        if (!ch) continue;
+        found = true;
+        try {
+          await this._playTTSOnce(ch, next);
+        } catch (err) {
+          if (err?.message !== 'TTS_SKIP') {
+            console.error('[TTS] Error playing TTS:', err?.message || err);
+          }
+        }
       }
     }
 
-    this.isSpeaking.set(channelId, false);
+    this.isProcessingQueues = false;
   }
 
   // Ensure voice connection is ready — reuse existing if still alive
@@ -198,11 +211,24 @@ export class TTSService {
 
     const BAD_STATES = [VoiceConnectionStatus.Destroyed, VoiceConnectionStatus.Disconnected];
 
-    // ยืม connection เดิมถ้ามีอยู่แล้ว (เช่น music player กำลังเล่น) — ไม่ join ใหม่เพื่อไม่รบกวน
     const globalConn = getVoiceConnection(guildId);
     if (globalConn && !BAD_STATES.includes(globalConn.state.status)) {
-      this.connections.set(channelId, globalConn);
-      return globalConn;
+      const connChannelId = globalConn.joinConfig?.channelId;
+      if (connChannelId === channelId) {
+        // อยู่ห้องเดียวกัน — ยืมได้เลย
+        this.connections.set(channelId, globalConn);
+        return globalConn;
+      }
+      // อยู่คนละห้อง — ถ้ามีเพลงเล่นอยู่ไม่รบกวน (ไม่ย้ายบอท)
+      const musicQueue = channel.guild.client?.player?.nodes?.cache?.get(guildId);
+      if (musicQueue?.isPlaying()) {
+        console.log(`[TTS] ข้ามการประกาศ: บอทอยู่ห้อง ${connChannelId} และกำลังเล่นเพลงอยู่`);
+        throw new Error('TTS_SKIP');
+      }
+      // ไม่มีเพลง — destroy connection เก่าแล้ว join ห้องที่ถูกต้อง
+      console.log(`[TTS] ย้ายจากห้อง ${connChannelId} ไปห้อง ${channelId}`);
+      try { globalConn.destroy(); } catch {}
+      this.connections.delete(connChannelId);
     }
 
     let connection = this.connections.get(channelId);
