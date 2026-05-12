@@ -2,7 +2,7 @@ import { Events, EmbedBuilder } from 'discord.js';
 import config from '../config.js';
 import { getReply, isOnCooldown, isChatAllowed } from '../services/chat/chatService.js';
 
-const SAKURA_LOG_CHANNEL = 'ห้องประชุมซากุระ';
+const SAKURA_LOG_CHANNEL = 'ห้องประชุมซากุระ🌸';
 
 export default {
     name: Events.MessageCreate,
@@ -316,7 +316,7 @@ export default {
                     }
                 }
 
-                // Log to ห้องประชุมซากุระ
+                // Log to ห้องประชุมซากุระ🌸
                 try {
                     const now = new Date();
                     const thaiDate = now.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -348,7 +348,7 @@ export default {
                         await sakuraChannel.send({ embeds: [sakuraEmbed] });
                     }
                 } catch (err) {
-                    console.error('[Moderation] ไม่สามารถส่ง log ไปที่ห้องประชุมซากุระ:', err.message);
+                    console.error('[Moderation] ไม่สามารถส่ง log ไปที่ห้องประชุมซากุระ🌸:', err.message);
                 }
 
                 // Learn from this violation (include meta for guild and source)

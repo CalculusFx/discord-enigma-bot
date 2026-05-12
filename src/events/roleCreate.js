@@ -2,7 +2,7 @@ import { Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Aud
 import { addRequest } from '../services/roleApprovalService.js';
 
 const VIP_ROLES = ['⁺₊✧ CEO ✧⁺₊', 'admin'];
-const APPROVAL_CHANNEL_NAME = 'ห้องประชุมซากุระ';
+const APPROVAL_CHANNEL_NAME = 'ห้องประชุมซากุระ🌸';
 
 export default {
     name: Events.GuildRoleCreate,
@@ -44,7 +44,7 @@ export default {
             // บันทึก pending
             addRequest(requestId, roleData);
 
-            // หาห้องประชุมซากุระ
+            // หาห้องประชุมซากุระ🌸
             const approvalChannel = role.guild.channels.cache.find(c => c.name === APPROVAL_CHANNEL_NAME && c.isTextBased());
             if (!approvalChannel) {
                 console.warn('[RoleApproval] ไม่พบช่อง:', APPROVAL_CHANNEL_NAME);

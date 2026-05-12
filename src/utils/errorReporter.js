@@ -1,6 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 
-const LOG_CHANNEL_NAME = 'ห้องประชุมซากุระ';
+const LOG_CHANNEL_NAME = 'ห้องประชุมซากุระ🌸';
 const FLOOD_COOLDOWN_MS = 15000; // ส่งซ้ำได้ทุก 15 วิ per source
 
 let _client = null;
@@ -21,7 +21,7 @@ async function findLogChannel() {
 }
 
 /**
- * ส่ง error/warning ไปห้องประชุมซากุระ
+ * ส่ง error/warning ไปห้องประชุมซากุระ🌸
  * @param {'error'|'warn'|'info'} level
  * @param {string} source  - ชื่อแหล่งที่มา เช่น 'PlayerError', 'Command:play'
  * @param {Error|string} errorOrMsg

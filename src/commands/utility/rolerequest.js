@@ -3,7 +3,7 @@ import { addRequest } from '../../services/roleApprovalService.js';
 import crypto from 'crypto';
 import config from '../../config.js';
 
-const LOG_CHANNEL_NAME = 'ห้องประชุมซากุระ';
+const LOG_CHANNEL_NAME = 'ห้องประชุมซากุระ🌸';
 const APPROVER_ROLES = ['⁺₊✧ CEO ✧⁺₊', 'admin ⁺₊✧', '✩‧₊˚ แม่บ้าน ✩‧₊˚'];
 
 export default {

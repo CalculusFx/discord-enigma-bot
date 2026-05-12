@@ -2,7 +2,7 @@ import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags } 
 import config from '../../config.js';
 import { addAdminLog } from '../../services/database.js';
 
-const LOG_CHANNEL_NAME = 'ห้องประชุมซากุระ';
+const LOG_CHANNEL_NAME = 'ห้องประชุมซากุระ🌸';
 
 export default {
     data: new SlashCommandBuilder()
@@ -79,7 +79,7 @@ export default {
             return interaction.editReply({ content: `❌ ไม่สามารถไล่ออกได้: ${err.message}` });
         }
 
-        // 3. Log ไปที่ ห้องประชุมซากุระ
+        // 3. Log ไปที่ ห้องประชุมซากุระ🌸
         try {
             const channels = await interaction.guild.channels.fetch().catch(() => null);
             const logChannel = channels?.find(c => c?.name === LOG_CHANNEL_NAME && c.isTextBased?.());
@@ -103,7 +103,7 @@ export default {
                 await logChannel.send({ embeds: [logEmbed] });
             }
         } catch (err) {
-            console.error('[Kick] ไม่สามารถส่ง log ไปที่ห้องประชุมซากุระ:', err.message);
+            console.error('[Kick] ไม่สามารถส่ง log ไปที่ห้องประชุมซากุระ🌸:', err.message);
         }
 
         // 4. บันทึก admin log
