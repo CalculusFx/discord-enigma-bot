@@ -343,29 +343,23 @@ export class TTSService {
 
       console.log('[TTS] Creating audio player, file exists:', existsSync(filepath));
 
-      // Wrap player in Promise so we properly await playback completion
-      // timeout 60s ป้องกัน hang ตลอดกาลถ้า player ไม่ transition state
-      const PLAYER_TIMEOUT_MS = 60000;
-      await Promise.race([
-        new Promise((resolve) => setTimeout(() => {
-          console.warn('[TTS] Player timeout — force resolving to unblock queue');
-          try { if (existsSync(filepath)) unlinkSync(filepath); } catch {}
-          resolve();
-        }, PLAYER_TIMEOUT_MS)),
-        new Promise((resolve) => {
+      // Wrap player in Promise — timeout อยู่ข้างใน เพื่อให้ clearTimeout ได้เมื่อ player เสร็จปกติ
+      await new Promise((resolve) => {
         const player = createAudioPlayer();
         const resource = createAudioResource(filepath);
         connection.subscribe(player);
 
         let resolved = false;
+        let timeoutHandle = null;
+
         const cleanup = (reason) => {
           if (resolved) return;
           resolved = true;
+          if (timeoutHandle) clearTimeout(timeoutHandle);
           player.removeAllListeners();
           console.log('[TTS] Player done, reason:', reason);
           try { if (existsSync(filepath)) unlinkSync(filepath); } catch {}
           if (wasPlaying && musicQueue) {
-            // Re-subscribe music player's audio player กลับก่อน แล้วค่อย resume
             try {
               const dpPlayer = musicQueue.dispatcher?.audioPlayer;
               if (dpPlayer) {
@@ -380,11 +374,17 @@ export class TTSService {
               }
             }, 300);
           } else if (!borrowed) {
-            // รอ 30 วินาทีก่อน disconnect — ถ้ามีคนเข้าออกถี่ๆ จะได้ใช้ connection เดิม ไม่ต้อง destroy/create ซ้ำ
             this._scheduleDisconnect(channelId, guildId, channel.guild.client);
           }
           resolve();
         };
+
+        // timeout 60s ป้องกัน hang — ถูก cancel โดย cleanup() ถ้า player เสร็จก่อน
+        timeoutHandle = setTimeout(() => {
+          console.warn('[TTS] Player timeout — force resolving to unblock queue');
+          try { if (existsSync(filepath)) unlinkSync(filepath); } catch {}
+          cleanup('timeout');
+        }, 60000);
 
         player.on('stateChange', (oldState, newState) => {
           console.log('[TTS] Player state:', oldState.status, '→', newState.status);
@@ -406,8 +406,7 @@ export class TTSService {
           console.error('[TTS] player.play() threw:', playErr?.message || playErr);
           cleanup('play-error');
         }
-        }),  // end inner Promise
-      ]);   // end Promise.race
+      });
 
     } catch (error) {
       console.error('TTS _playTTSOnce error:', error);
@@ -587,7 +586,7 @@ export class TTSService {
 
     const fetch = (await import('node-fetch')).default;
     const apiKey =
-      this.openai.apiKey ||
+      this.openai?.apiKey ||
       this.openai?.configuration?.apiKey ||
       process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error('OpenAI API key not found for TTS');
@@ -596,7 +595,7 @@ export class TTSService {
     const body = JSON.stringify({ model, voice, input: prepared });
 
     const abortCtrl = new AbortController();
-    const abortTimer = setTimeout(() => abortCtrl.abort(), 12000);
+    const abortTimer = setTimeout(() => abortCtrl.abort(), 5000);
     const resp = await fetch(url, {
       method: 'POST',
       headers: {
