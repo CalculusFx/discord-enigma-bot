@@ -178,28 +178,29 @@ export class TTSService {
     if (this.isProcessingQueues) return;
     this.isProcessingQueues = true;
 
-    // วน scan ทุกห้องจนกว่าทุก queue จะว่าง
-    // items ที่ถูก push เข้ามาระหว่าง await จะถูกหยิบในรอบ outer-while ถัดไปเสมอ
-    let found = true;
-    while (found) {
-      found = false;
-      for (const [cId, queue] of this.queues) {
-        if (queue.length === 0) continue;
-        const next = queue.shift();
-        const ch = this.channelRefs.get(cId);
-        if (!ch) continue;
-        found = true;
-        try {
-          await this._playTTSOnce(ch, next);
-        } catch (err) {
-          if (err?.message !== 'TTS_SKIP') {
-            console.error('[TTS] Error playing TTS:', err?.message || err);
+    // ใช้ try/finally เพื่อให้ flag ถูก reset เสมอ ไม่ว่าจะเกิด error อะไร
+    try {
+      let found = true;
+      while (found) {
+        found = false;
+        for (const [cId, queue] of this.queues) {
+          if (queue.length === 0) continue;
+          const next = queue.shift();
+          const ch = this.channelRefs.get(cId);
+          if (!ch) continue;
+          found = true;
+          try {
+            await this._playTTSOnce(ch, next);
+          } catch (err) {
+            if (err?.message !== 'TTS_SKIP') {
+              console.error('[TTS] Error playing TTS:', err?.message || err);
+            }
           }
         }
       }
+    } finally {
+      this.isProcessingQueues = false;
     }
-
-    this.isProcessingQueues = false;
   }
 
   // Ensure voice connection is ready — reuse existing if still alive
@@ -213,22 +214,30 @@ export class TTSService {
 
     const globalConn = getVoiceConnection(guildId);
     if (globalConn && !BAD_STATES.includes(globalConn.state.status)) {
-      const connChannelId = globalConn.joinConfig?.channelId;
+      // joinConfig อาจเป็น undefined ใน discord-voip บางเวอร์ชัน ใช้ optional chaining ปลอดภัย
+      const connChannelId = globalConn.joinConfig?.channelId ?? null;
+
       if (connChannelId === channelId) {
         // อยู่ห้องเดียวกัน — ยืมได้เลย
         this.connections.set(channelId, globalConn);
         return globalConn;
       }
-      // อยู่คนละห้อง — ถ้ามีเพลงเล่นอยู่ไม่รบกวน (ไม่ย้ายบอท)
-      const musicQueue = channel.guild.client?.player?.nodes?.cache?.get(guildId);
-      if (musicQueue?.isPlaying()) {
-        console.log(`[TTS] ข้ามการประกาศ: บอทอยู่ห้อง ${connChannelId} และกำลังเล่นเพลงอยู่`);
-        throw new Error('TTS_SKIP');
+
+      if (connChannelId !== null) {
+        // รู้ว่าอยู่คนละห้อง — เช็คว่าเพลงกำลังเล่นอยู่ไหม
+        const musicQueue = channel.guild.client?.player?.nodes?.cache?.get(guildId);
+        if (musicQueue?.isPlaying()) {
+          console.log(`[TTS] ข้ามการประกาศ: บอทอยู่ห้อง ${connChannelId} และกำลังเล่นเพลงอยู่`);
+          throw new Error('TTS_SKIP');
+        }
+        // ไม่มีเพลง — ย้ายห้อง: ไม่ destroy เอง ให้ joinVoiceChannel จัดการ (ป้องกัน race condition)
+        console.log(`[TTS] ย้ายจากห้อง ${connChannelId} ไปห้อง ${channelId}`);
+        this.connections.delete(connChannelId);
+      } else {
+        // ไม่รู้ connChannelId (discord-voip ไม่มี joinConfig) — ยืม connection เดิมไว้ก่อน
+        this.connections.set(channelId, globalConn);
+        return globalConn;
       }
-      // ไม่มีเพลง — destroy connection เก่าแล้ว join ห้องที่ถูกต้อง
-      console.log(`[TTS] ย้ายจากห้อง ${connChannelId} ไปห้อง ${channelId}`);
-      try { globalConn.destroy(); } catch {}
-      this.connections.delete(connChannelId);
     }
 
     let connection = this.connections.get(channelId);
@@ -335,7 +344,15 @@ export class TTSService {
       console.log('[TTS] Creating audio player, file exists:', existsSync(filepath));
 
       // Wrap player in Promise so we properly await playback completion
-      await new Promise((resolve) => {
+      // timeout 60s ป้องกัน hang ตลอดกาลถ้า player ไม่ transition state
+      const PLAYER_TIMEOUT_MS = 60000;
+      await Promise.race([
+        new Promise((resolve) => setTimeout(() => {
+          console.warn('[TTS] Player timeout — force resolving to unblock queue');
+          try { if (existsSync(filepath)) unlinkSync(filepath); } catch {}
+          resolve();
+        }, PLAYER_TIMEOUT_MS)),
+        new Promise((resolve) => {
         const player = createAudioPlayer();
         const resource = createAudioResource(filepath);
         connection.subscribe(player);
@@ -389,7 +406,8 @@ export class TTSService {
           console.error('[TTS] player.play() threw:', playErr?.message || playErr);
           cleanup('play-error');
         }
-      });
+        }),  // end inner Promise
+      ]);   // end Promise.race
 
     } catch (error) {
       console.error('TTS _playTTSOnce error:', error);
