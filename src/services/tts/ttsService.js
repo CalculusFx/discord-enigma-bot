@@ -465,17 +465,53 @@ export class TTSService {
         console.warn('[TTS] OpenAI provider selected but no runtime key found; using Google gTTS');
         await this.generateGoogleTTS(text, filepath);
       } else {
-        // create a short-lived OpenAI client with explicit 12s timeout (default is 10 minutes!)
-        this.openai = new OpenAI({ apiKey: runtimeKey, timeout: 12000, maxRetries: 0 });
+        // Race OpenAI กับ gTTS — ใช้อันที่เสร็จก่อน เพื่อไม่ให้ delay นาน
+        this.openai = new OpenAI({ apiKey: runtimeKey, timeout: 5000, maxRetries: 0 });
         if (config.tts.debug) console.log('[TTS] Using OpenAI key (masked):', (runtimeKey || '').slice(0, 8) + '...');
+
+        const gttsFilepath = filepath + '.gtts.mp3';
+        let winner = null;
+
         try {
-          await this.generateOpenAITTS(text, filepath);
+          const openaiPromise = this.generateOpenAITTS(text, filepath)
+            .then(() => { if (!winner) { winner = 'openai'; } })
+            .catch(err => { console.warn('[TTS] OpenAI failed in race:', err?.message); });
+
+          const gttsPromise = this.generateGoogleTTS(text, gttsFilepath)
+            .then(() => { if (!winner) { winner = 'gtts'; } })
+            .catch(err => { console.warn('[TTS] gTTS failed in race:', err?.message); });
+
+          // รอจนกว่าอย่างน้อยหนึ่งอันเสร็จ
+          await Promise.race([
+            openaiPromise.then(() => winner === 'openai' || null),
+            gttsPromise.then(() => winner === 'gtts' || null),
+          ]);
+
+          if (winner === 'gtts') {
+            // gTTS เสร็จก่อน — ใช้เลย แล้วปล่อย OpenAI วิ่งต่อใน background เพื่อ warm cache
+            await fsPromises.copyFile(gttsFilepath, filepath);
+            console.log('[TTS] gTTS เสร็จก่อน ใช้ได้เลย');
+            openaiPromise.then(async () => {
+              // OpenAI เสร็จ — save ลง cache เพื่อครั้งหน้า
+              if (winner === 'gtts' && config.tts.cache?.enabled && existsSync(filepath)) {
+                const hash = crypto.createHash('sha256').update(text + '|' + this.language).digest('hex');
+                const cacheFile = join(config.tts.cache.dir, `${hash}.mp3`);
+                await fsPromises.copyFile(filepath, cacheFile).catch(() => null);
+                console.log('[TTS] OpenAI cache saved for next time');
+              }
+            }).catch(() => null);
+          } else if (winner === 'openai') {
+            console.log('[TTS] OpenAI เสร็จก่อน ใช้ได้เลย');
+          } else {
+            throw new Error('ทั้ง OpenAI และ gTTS ล้มเหลว');
+          }
         } catch (err) {
-          console.error('OpenAI TTS failed, falling back to Google gTTS:', err?.message || err);
+          console.error('[TTS] Race ล้มเหลว:', err?.message);
+          // last resort: ลองใช้ gTTS เดี่ยวๆ
           await this.generateGoogleTTS(text, filepath);
         } finally {
-          // avoid retaining client/key
           this.openai = null;
+          fsPromises.unlink(gttsFilepath).catch(() => null);
         }
       }
     } else {
