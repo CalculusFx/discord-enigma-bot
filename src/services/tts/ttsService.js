@@ -69,6 +69,17 @@ export class TTSService {
     }
 
     this.stats = { cacheHits: 0, cacheMisses: 0, lastOpenAIResponse: null };
+    this.chimeJoinPath = null;
+    this.chimeLeavePath = null;
+    this._initChimes();
+  }
+
+  _initChimes() {
+    const assetsDir = join(__dirname, '../../assets/sounds');
+    const joinPath  = join(assetsDir, 'chime_join.mp3');
+    const leavePath = join(assetsDir, 'chime_leave.mp3');
+    if (existsSync(joinPath))  { this.chimeJoinPath  = joinPath;  console.log('[TTS] chime join loaded');  }
+    if (existsSync(leavePath)) { this.chimeLeavePath = leavePath; console.log('[TTS] chime leave loaded'); }
   }
 
   _getRuntimeOpenAIKey() {
@@ -147,7 +158,7 @@ export class TTSService {
     const cleanName = this.sanitizeDisplayName(username, fallback);
     const text = `ยินดีต้อนรับ! ${cleanName} เข้าร่วมห้องเสียง`;
     console.log('[TTS] announceJoin → speak:', JSON.stringify(text), 'channel:', channel.id);
-    await this.speak(channel, text);
+    await this._enqueueAnnounce(channel, text, this.chimeJoinPath);
   }
 
   async announceLeave(channel, username) {
@@ -157,7 +168,22 @@ export class TTSService {
     const cleanName = this.sanitizeDisplayName(username, fallback);
     const text = `${cleanName} ออกจากห้องเสียงแล้ว`;
     console.log('[TTS] announceLeave → speak:', JSON.stringify(text), 'channel:', channel.id);
-    await this.speak(channel, text);
+    await this._enqueueAnnounce(channel, text, this.chimeLeavePath);
+  }
+
+  // queue sfx → TTS ในลำดับเดียวกัน แล้วเริ่ม processor
+  async _enqueueAnnounce(channel, text, sfxPath = null) {
+    if (!channel || !channel.guild) return;
+    const channelId = channel.id;
+    if (!this.queues.has(channelId)) this.queues.set(channelId, []);
+    this.channelRefs.set(channelId, channel);
+    const q = this.queues.get(channelId);
+    if (q.length >= 4) { console.log('[TTS] queue full, dropping announce'); return; }
+    if (sfxPath && existsSync(sfxPath)) {
+      q.push({ type: 'sfx', path: sfxPath });
+    }
+    q.push({ type: 'tts', text: String(text || '') });
+    this._startProcessor();
   }
 
   async speak(channel, text) {
@@ -170,36 +196,90 @@ export class TTSService {
     const q = this.queues.get(channelId);
     // ถ้า queue เต็มแล้ว (> 2) ตัดทิ้ง — ไม่งั้นจะค้างอ่านประกาศเก่าเป็นชั่วโมง
     if (q.length >= 2) { console.log('[TTS] queue full, dropping:', text); return; }
-    q.push(String(text || ''));
+    q.push({ type: 'tts', text: String(text || '') });
 
     console.log('[TTS] speak() queued channel', channelId, 'isProcessing=', this.isProcessingQueues, 'queueLen=', q.length);
+    this._startProcessor();
+  }
 
-    // ถ้า global processor กำลังทำงานอยู่ มันจะหยิบ item นี้เองในรอบถัดไป
+  // แยก processor logic ออกมาเพื่อให้ทั้ง speak() และ _enqueueAnnounce() ใช้ร่วมกันได้
+  _startProcessor() {
     if (this.isProcessingQueues) return;
     this.isProcessingQueues = true;
 
     // ใช้ try/finally เพื่อให้ flag ถูก reset เสมอ ไม่ว่าจะเกิด error อะไร
-    try {
-      let found = true;
-      while (found) {
-        found = false;
-        for (const [cId, queue] of this.queues) {
-          if (queue.length === 0) continue;
-          const next = queue.shift();
-          const ch = this.channelRefs.get(cId);
-          if (!ch) continue;
-          found = true;
-          try {
-            await this._playTTSOnce(ch, next);
-          } catch (err) {
-            if (err?.message !== 'TTS_SKIP') {
-              console.error('[TTS] Error playing TTS:', err?.message || err);
+    (async () => {
+      try {
+        let found = true;
+        while (found) {
+          found = false;
+          for (const [cId, queue] of this.queues) {
+            if (queue.length === 0) continue;
+            const item = queue.shift();
+            const ch = this.channelRefs.get(cId);
+            if (!ch) continue;
+            found = true;
+            try {
+              if (item?.type === 'sfx') {
+                await this._playSFXOnce(ch, item.path);
+              } else {
+                await this._playTTSOnce(ch, item?.text ?? item);
+              }
+            } catch (err) {
+              if (err?.message !== 'TTS_SKIP') {
+                console.error('[TTS] Error playing item:', err?.message || err);
+              }
             }
           }
         }
+      } finally {
+        this.isProcessingQueues = false;
       }
-    } finally {
-      this.isProcessingQueues = false;
+    })();
+  }
+
+  // เล่นไฟล์เสียงโดยตรงโดยไม่ผ่าน TTS generation
+  async _playSFXOnce(channel, filePath) {
+    if (!filePath || !existsSync(filePath)) return;
+    try {
+      const guildId = channel.guild.id;
+      const channelId = channel.id;
+
+      const db = await import('../database.js');
+      if (!db.isTtsEnabledForChannel(guildId, channelId)) return;
+
+      const connection = await this._ensureConnection(channel);
+
+      await new Promise((resolve) => {
+        const player = createAudioPlayer();
+        const resource = createAudioResource(filePath);
+        connection.subscribe(player);
+
+        let resolved = false;
+        let timeoutHandle = null;
+
+        const cleanup = (reason) => {
+          if (resolved) return;
+          resolved = true;
+          if (timeoutHandle) clearTimeout(timeoutHandle);
+          player.removeAllListeners();
+          resolve();
+        };
+
+        timeoutHandle = setTimeout(() => cleanup('sfx-timeout'), 10000);
+
+        player.on('stateChange', (oldState, newState) => {
+          const done = newState.status === AudioPlayerStatus.Idle || newState.status === AudioPlayerStatus.AutoPaused;
+          if (done && oldState.status !== AudioPlayerStatus.Idle) cleanup(newState.status);
+        });
+        player.once('error', () => cleanup('sfx-error'));
+
+        try { player.play(resource); } catch { cleanup('sfx-play-error'); }
+      });
+    } catch (err) {
+      if (err?.message !== 'TTS_SKIP') {
+        console.error('[TTS] SFX error:', err?.message);
+      }
     }
   }
 
